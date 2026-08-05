@@ -14,14 +14,54 @@ import { GroupChat } from './components/GroupChat';
 import { DashboardSummaryPage } from './components/DashboardSummaryPage';
 import { Sparkles, MessageSquare, Bell, Mail, X } from 'lucide-react';
 
+// Default Fallback Users in case API is offline or slow
+const DEFAULT_USERS: User[] = [
+  {
+    id: 'usr_1',
+    name: 'Daniela Perez',
+    email: 'dinosaurio.danielap@gmail.com',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    role: 'Líder de Proyecto',
+    department: 'Operaciones',
+    online: true,
+  },
+  {
+    id: 'usr_2',
+    name: 'Carlos Mendoza',
+    email: 'carlos.mendoza@empresa.com',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    role: 'Coordinador de Proveedores',
+    department: 'Logística',
+    online: true,
+  },
+  {
+    id: 'usr_3',
+    name: 'Sofia Ramirez',
+    email: 'sofia.ramirez@empresa.com',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    role: 'Analista de Compras',
+    department: 'Finanzas',
+    online: false,
+  },
+  {
+    id: 'usr_4',
+    name: 'Mateo Rossi',
+    email: 'mateo.rossi@empresa.com',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    role: 'Supervisora de Calidad',
+    department: 'Sistemas',
+    online: true,
+  },
+];
+
 export default function App() {
   // Navigation active view tab
   const [activeTab, setActiveTab] = useState<'cargar' | 'en_proceso' | 'finalizadas' | 'trello' | 'chat' | 'dashboard'>('cargar');
   const [dismissedMentionNotifId, setDismissedMentionNotifId] = useState<string | null>(null);
 
   // Application Data States
-  const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [allUsers, setAllUsers] = useState<User[]>(DEFAULT_USERS);
+  const [currentUser, setCurrentUser] = useState<User | null>(DEFAULT_USERS[0]);
   const [stageTasks, setStageTasks] = useState<StageTask[]>([]);
   const [trelloCards, setTrelloCards] = useState<TrelloCard[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -32,29 +72,46 @@ export default function App() {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [activeSimulatedEmail, setActiveSimulatedEmail] = useState<SimulatedEmail | null>(null);
 
+  // Safe Fetch Helper
+  const safeFetchJson = async (url: string) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  };
+
   // Initial Data Fetch
   const fetchData = async () => {
     try {
       const [uRes, tRes, trRes, cRes, nRes, wRes] = await Promise.all([
-        fetch('/api/users').then(r => r.json()),
-        fetch('/api/tasks').then(r => r.json()),
-        fetch('/api/trello').then(r => r.json()),
-        fetch('/api/chat').then(r => r.json()),
-        fetch('/api/notifications').then(r => r.json()),
-        fetch('/api/whiteboard').then(r => r.json())
+        safeFetchJson('/api/users'),
+        safeFetchJson('/api/tasks'),
+        safeFetchJson('/api/trello'),
+        safeFetchJson('/api/chat'),
+        safeFetchJson('/api/notifications'),
+        safeFetchJson('/api/whiteboard')
       ]);
 
-      setAllUsers(uRes);
-      if (!currentUser && uRes.length > 0) {
-        setCurrentUser(uRes[0]);
+      if (Array.isArray(uRes) && uRes.length > 0) {
+        setAllUsers(uRes);
+        setCurrentUser(prev => prev || uRes[0]);
+      } else {
+        setAllUsers(DEFAULT_USERS);
+        setCurrentUser(prev => prev || DEFAULT_USERS[0]);
       }
-      setStageTasks(tRes);
-      setTrelloCards(trRes);
-      setChatMessages(cRes);
-      setNotifications(nRes);
-      setWhiteboardElements(wRes);
+
+      if (Array.isArray(tRes)) setStageTasks(tRes);
+      if (Array.isArray(trRes)) setTrelloCards(trRes);
+      if (Array.isArray(cRes)) setChatMessages(cRes);
+      if (Array.isArray(nRes)) setNotifications(nRes);
+      if (Array.isArray(wRes)) setWhiteboardElements(wRes);
     } catch (err) {
       console.error('Error al cargar datos iniciales:', err);
+      setAllUsers(DEFAULT_USERS);
+      setCurrentUser(prev => prev || DEFAULT_USERS[0]);
     }
   };
 
@@ -62,31 +119,41 @@ export default function App() {
     fetchData();
 
     // Subscribe to real-time Server-Sent Events (SSE)
-    const eventSource = new EventSource('/api/events');
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/events');
 
-    eventSource.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === 'tasks_updated') {
-          setStageTasks(data.payload);
-        } else if (data.type === 'trello_updated') {
-          setTrelloCards(data.payload);
-        } else if (data.type === 'chat_updated') {
-          setChatMessages(data.payload);
-        } else if (data.type === 'notifications_updated') {
-          setNotifications(data.payload);
-        } else if (data.type === 'users_updated') {
-          setAllUsers(data.payload);
-        } else if (data.type === 'whiteboard_updated') {
-          setWhiteboardElements(data.payload);
+      eventSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'tasks_updated') {
+            setStageTasks(data.payload);
+          } else if (data.type === 'trello_updated') {
+            setTrelloCards(data.payload);
+          } else if (data.type === 'chat_updated') {
+            setChatMessages(data.payload);
+          } else if (data.type === 'notifications_updated') {
+            setNotifications(data.payload);
+          } else if (data.type === 'users_updated') {
+            setAllUsers(data.payload);
+          } else if (data.type === 'whiteboard_updated') {
+            setWhiteboardElements(data.payload);
+          }
+        } catch (err) {
+          console.error('Error en SSE:', err);
         }
-      } catch (err) {
-        console.error('Error en SSE:', err);
-      }
-    };
+      };
+
+      eventSource.onerror = () => {
+        // Quietly close if SSE connection fails (e.g. serverless environment)
+        eventSource?.close();
+      };
+    } catch (err) {
+      console.warn('SSE no disponible:', err);
+    }
 
     return () => {
-      eventSource.close();
+      eventSource?.close();
     };
   }, []);
 
@@ -95,7 +162,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-white">
         <div className="animate-pulse flex flex-col items-center gap-3">
           <Sparkles className="w-8 h-8 text-indigo-400" />
-          <p className="text-sm font-semibold">Cargando CollabTask...</p>
+          <p className="text-sm font-semibold">Cargando Nexo Team...</p>
         </div>
       </div>
     );
