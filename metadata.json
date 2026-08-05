@@ -1,0 +1,6 @@
+{
+  "name": "🤝 Nexo Team - Plataforma Colaborativa de Tareas",
+  "description": "Plataforma colaborativa en tiempo real con chat grupal, flujo de tareas por etapas, tablero Kanban interactivo con drag & drop y menciones @usuario por email.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
